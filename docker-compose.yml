@@ -1,0 +1,60 @@
+services:
+  app:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    container_name: data_dinas_app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - data_dinas_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: nginx:alpine
+    container_name: data_dinas_web
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - data_dinas_net
+    depends_on:
+      - app
+
+  db:
+    image: mariadb:10.11
+    container_name: data_dinas_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-data_dinas}
+      MYSQL_USER: ${DB_USERNAME:-dinas_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-dinas_password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
+    ports:
+      - "${DB_PORT_EXTERNAL:-33066}:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - data_dinas_net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dbdata:
+    driver: local
+
+networks:
+  data_dinas_net:
+    driver: bridge
+
