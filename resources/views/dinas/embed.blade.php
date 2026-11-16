@@ -23,54 +23,24 @@
         <!-- Left: Back Button & Dinas Info -->
         <div class="flex items-center gap-3">
             <a href="{{ route('dinas.portal') }}" 
-               class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition border"
-               :class="isDark 
-                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700' 
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+               class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition btn-tactile border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
                 <span>Kembali ke Portal</span>
             </a>
 
             <div class="h-4 w-px bg-slate-700"></div>
 
             <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center p-1 shadow-sm shrink-0 bg-slate-800 border border-slate-700">
+                <div class="w-7 h-7 rounded-lg flex items-center justify-center p-1 shadow-xs shrink-0 bg-slate-800 border border-slate-700">
                     <img src="{{ asset('images/bps-logo.svg') }}" alt="Logo BPS" class="w-full h-full object-contain">
                 </div>
                 <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                    <h1 class="text-xs sm:text-sm font-extrabold truncate max-w-xs sm:max-w-md text-white">
+                    <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                    <h1 class="text-xs sm:text-sm font-semibold truncate max-w-xs sm:max-w-md text-white">
                         {{ $dinas->nama_dinas }}
                     </h1>
                 </div>
             </div>
-        </div>
-
-        <!-- Right Side: Mode Switcher, PIC & Logout -->
-        <div class="flex items-center gap-3 text-xs">
-            <!-- Pill Switcher Mode Gelap / Terang -->
-            <button type="button" 
-                    @click="toggleTheme()" 
-                    class="hidden sm:flex px-3 py-1.5 rounded-full backdrop-blur-md border text-[11px] font-semibold items-center gap-1.5 transition"
-                    :class="isDark 
-                        ? 'bg-slate-800/80 hover:bg-slate-800 text-white border-slate-700' 
-                        : 'bg-slate-800/60 hover:bg-slate-800 text-white border-slate-700'">
-                <span>Mode Gelap/Terang</span>
-                <span class="text-xs" x-text="isDark ? '🌙' : '☀️'"></span>
-            </button>
-
-            <span class="hidden md:inline-block text-slate-400 text-xs">
-                PIC: <span class="text-slate-200 font-semibold">{{ $dinas->pic_name ?? '-' }}</span>
-            </span>
-
-            <form action="{{ route('dinas.logout') }}" method="POST">
-                @csrf
-                <button type="submit" 
-                        title="Keluar dari sesi" 
-                        class="px-3 py-1.5 text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-600/30 rounded-xl transition border border-rose-500/20">
-                    Keluar
-                </button>
-            </form>
         </div>
     </header>
 

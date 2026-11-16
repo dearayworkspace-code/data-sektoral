@@ -45,7 +45,8 @@ class AdminDashboardController extends Controller
             }
         }
 
-        $dinasList = $query->orderBy('nama_dinas', 'asc')->paginate(15)->withQueryString();
+        $perPage = in_array((int)$request->input('per_page'), [10, 20, 50, 100]) ? (int)$request->input('per_page') : 10;
+        $dinasList = $query->orderBy('nama_dinas', 'asc')->paginate($perPage)->withQueryString();
 
         // Statistik ringkas untuk kartu dashboard
         $stats = [
@@ -570,69 +571,145 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Ekspor seluruh data dinas dan rekap PIC ke CSV
+     * Ekspor tabel LSDA ke format Excel (.xlsx) sesuai format resmi sheet LSDA2026
      */
     public function export()
     {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('LSDA2026');
+
+        // Header kolom resmi sesuai sheet LSDA 2026
         $headers = [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="rekap_dinas_bps_' . date('Ymd_His') . '.csv"',
-            'Pragma' => 'no-cache',
-            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires' => '0',
+            'NO',
+            'WORD',
+            'EVALUASI',
+            'NAMA DINAS',
+            'TAUTAN FILE',
+            'NO TABEL',
+            'NAMA TABEL',
+            'PETUGAS',
+            'CONTACT PERSON 2024',
+            'CONTACT PERSON 2025',
+            'CONTACT PERSON 2026',
+            'DATA MASUK',
+            'SUBJEK DI WEB',
+            'JUMLAH TABEL DI WEBSITE',
+            'CATATAN'
         ];
 
-        $callback = function () {
-            $handle = fopen('php://output', 'w');
-            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+        // Tulis header di baris 1
+        $colLetter = 'A';
+        foreach ($headers as $headerText) {
+            $sheet->setCellValue($colLetter . '1', $headerText);
+            $colLetter++;
+        }
 
-            // Header kolom
-            fputcsv($handle, [
-                'No',
-                'Nama Dinas',
-                'Shortlink (WORD)',
-                'Petugas Pembina BPS',
-                'Catatan Evaluasi',
-                'Status Pengisian Akun',
-                'Nama PIC',
-                'Nomor Telepon/WA',
-                'PIN Saat Ini',
-                'Link Spreadsheet',
-                'Total Tabel',
-                'Tabel Selesai Diisi Dinas',
-                'Tabel Diterima BPS (Data Masuk)',
-                'Login Terakhir',
-            ]);
+        // Styling Header (Background Abu-abu Gelap #595959, Huruf Putih Bold, Rata Tengah)
+        $headerRange = 'A1:O1';
+        $sheet->getStyle($headerRange)->getFont()->setBold(true)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FFFFFF'))->setSize(10);
+        $sheet->getStyle($headerRange)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FF595959');
+        $sheet->getStyle($headerRange)->getAlignment()
+              ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+              ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
+              ->setWrapText(true);
+        $sheet->getRowDimension(1)->setRowHeight(28);
 
-            $dinasList = Dinas::with('tabels')->orderBy('nama_dinas', 'asc')->get();
-            $no = 1;
+        // Ambil data dinas beserta rincian tabelnya
+        $dinasList = Dinas::with(['tabels' => function ($q) {
+            $q->orderBy('no_tabel', 'asc');
+        }])->orderBy('nama_dinas', 'asc')->get();
 
-            foreach ($dinasList as $dinas) {
-                $totalTables = $dinas->tabels->count();
-                $diisiCount = $dinas->tabels->where('status_pengisian', 'sudah_diisi')->count();
-                $masukCount = $dinas->tabels->where('data_masuk', true)->count();
+        $currentRow = 2;
+        $no = 1;
 
-                fputcsv($handle, [
-                    $no++,
-                    $dinas->nama_dinas,
-                    $dinas->shortlink ?? '-',
-                    $dinas->petugas_bps ?? '-',
-                    $dinas->evaluasi ?? '-',
-                    $dinas->is_first_login ? 'Belum Login / Belum Lengkapi PIC' : 'Aktif / PIC Lengkap',
-                    $dinas->pic_name ?? '-',
-                    $dinas->pic_phone ?? '-',
-                    $dinas->plain_pin,
-                    $dinas->spreadsheet_url ?? '-',
-                    $totalTables,
-                    $diisiCount,
-                    $masukCount,
-                    $dinas->last_login_at ? $dinas->last_login_at->format('d/m/Y H:i') : 'Belum Pernah',
-                ]);
+        foreach ($dinasList as $dinas) {
+            $tables = $dinas->tabels;
+            $cp2026 = $dinas->pic_name ? trim($dinas->pic_name . ($dinas->pic_phone ? "\n(" . $dinas->pic_phone . ")" : '')) : '';
+
+            if ($tables->count() > 0) {
+                $isFirstTable = true;
+                foreach ($tables as $tabel) {
+                    if ($isFirstTable) {
+                        $sheet->setCellValue('A' . $currentRow, $no++);
+                        $sheet->setCellValue('B' . $currentRow, $dinas->shortlink ?? '');
+                        $sheet->setCellValue('C' . $currentRow, $dinas->evaluasi ?? '');
+                        $sheet->setCellValue('D' . $currentRow, $dinas->nama_dinas);
+                        $sheet->setCellValue('E' . $currentRow, $dinas->spreadsheet_url ?? '');
+                        $sheet->setCellValue('H' . $currentRow, $dinas->petugas_bps ?? '');
+                        $sheet->setCellValue('K' . $currentRow, $cp2026);
+                        $isFirstTable = false;
+                    }
+
+                    $sheet->setCellValue('F' . $currentRow, $tabel->no_tabel ?? '');
+                    $sheet->setCellValue('G' . $currentRow, $tabel->nama_tabel ?? '');
+                    $sheet->setCellValue('L' . $currentRow, $tabel->data_masuk ? '☑' : '☐');
+                    $sheet->setCellValue('M' . $currentRow, $tabel->subjek_web ?? '');
+                    $sheet->setCellValue('N' . $currentRow, 1);
+                    $sheet->setCellValue('O' . $currentRow, $tabel->catatan_bps ?? ($tabel->catatan_dinas ?? ''));
+
+                    // Alignment per kolom
+                    $sheet->getStyle("A{$currentRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("F{$currentRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("L{$currentRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("N{$currentRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+                    // Highlight merah tua (#990000) untuk baris tabel yang belum diterima/masuk (sesuai template resmi di screenshot)
+                    if (!$tabel->data_masuk) {
+                        $sheet->getStyle("F{$currentRow}:G{$currentRow}")->getFill()
+                              ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                              ->getStartColor()->setARGB('FF990000');
+                        $sheet->getStyle("F{$currentRow}:G{$currentRow}")->getFont()
+                              ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FFFFFF'));
+                    }
+
+                    $currentRow++;
+                }
+            } else {
+                // Dinas belum memiliki tabel terdaftar
+                $sheet->setCellValue('A' . $currentRow, $no++);
+                $sheet->setCellValue('B' . $currentRow, $dinas->shortlink ?? '');
+                $sheet->setCellValue('C' . $currentRow, $dinas->evaluasi ?? '');
+                $sheet->setCellValue('D' . $currentRow, $dinas->nama_dinas);
+                $sheet->setCellValue('E' . $currentRow, $dinas->spreadsheet_url ?? '');
+                $sheet->setCellValue('H' . $currentRow, $dinas->petugas_bps ?? '');
+                $sheet->setCellValue('K' . $currentRow, $cp2026);
+                $sheet->getStyle("A{$currentRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $currentRow++;
             }
+        }
 
-            fclose($handle);
-        };
+        $lastRow = max(2, $currentRow - 1);
 
-        return new StreamedResponse($callback, 200, $headers);
+        // Border tipis untuk seluruh tabel
+        $styleBorder = [
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                    'color' => ['argb' => 'FFBFBFBF'],
+                ],
+            ],
+        ];
+        $sheet->getStyle("A1:O{$lastRow}")->applyFromArray($styleBorder);
+        $sheet->getStyle("A1:O{$lastRow}")->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+
+        // Auto-fit lebar seluruh kolom
+        foreach (range('A', 'O') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // Freeze panel baris pertama
+        $sheet->freezePane('A2');
+
+        $filename = 'LSDA_2026_' . date('Ymd_His') . '.xlsx';
+        
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 }
